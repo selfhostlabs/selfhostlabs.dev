@@ -1,0 +1,213 @@
+---
+title: 'Self hosting Plausible Analytics with Docker'
+date: '2024-03-24'
+tags: ['docker', 'analytics']
+summary: 'This is a guide to self host Plausible Analytics using Docker.'
+---
+
+## Introduction
+
+Hey Everyone, in todays post we are going to learn how to self host Plausible Analytics using Docker. We will configure the Plausible Analytics to run behind a reverse proxy using its built-in Caddy server with HTTPS enabled.
+
+<TOCInline toc={props.toc} exclude="Introduction" />
+
+## What is Plausible Analytics?
+
+According to [Plausible Analytics](https://plausible.io/): Plausible Analytics is a simple, open-source, lightweight (< 1 KB), and privacy-friendly alternative to Google Analytics. It doesn't use cookies and is fully compliant with GDPR, CCPA, and PECR. It's a great way to get insights into your website traffic without compromising your users' privacy.
+
+## Prerequisites
+
+- A server running Ubuntu 20.04 or more recent. This guide will use Ubuntu 20.04.
+- A non-root user with sudo privileges.
+- A domain name pointed at your server's IP address. (will configure it to run behind a reverse proxy later)
+- Docker installed on your server. You can follow the guide [here](https://docs.docker.com/engine/install/ubuntu/) to install Docker on your server.
+
+## Installation
+
+### Step 1: Update the system
+
+Before we start, its always better to update the system to the latest version. You can do it by running following command
+
+```bash
+sudo apt update && sudo apt upgrade
+```
+
+### Step 2: Clone the Plausible Analytics repository
+
+1. Create a new directory to install Plausible Analytics and navigate to it.
+
+   ```bash
+    mkdir analytics
+    cd analytics
+    ```
+
+2. clone the Plausible Analytics repository from their Github. [Plausible Analytics Github](https://github.com/plausible/community-editio)
+
+    ```bash
+    git clone https://github.com/plausible/community-edition.git
+    ```
+
+    output:
+
+    ```bash
+    ubuntu@selfhostlabs:~$ git clone https://github.com/plausible/community-edition .
+    Cloning into 'analytics'...
+    remote: Enumerating objects: 342, done.
+    remote: Counting objects: 100% (210/210), done.
+    remote: Compressing objects: 100% (125/125), done.
+    remote: Total 342 (delta 116), reused 149 (delta 84), pack-reused 132
+    Receiving objects: 100% (342/342), 8.50 MiB | 5.08 MiB/s, done.
+    Resolving deltas: 100% (145/145), done.
+    ```
+
+This are the files which we are going to use to run the Plausible Analytics.
+
+- **docker-compose.yml**:  This file contains the configuration to run the Plausible Analytics using Docker.
+- **plausible-conf.env**: This file contains the configuration for the Plausible Analytics.
+- **reverse-proxy/docker-compose.caddy-gen.yml**: This file contains the configuration to run the Caddy server which will act as a reverse proxy for the Plausible Analytics.
+
+### Step 3: Configure Plausible Analytics
+
+1. Let's start with configuring the configuration environment file `plausible-conf.env`. Here is the default configuration which comes with the repository.
+
+    ```bash
+    BASE_URL=replace-me
+    SECRET_KEY_BASE=replace-me
+    ```
+
+2. Replace the `BASE_URL` with the domain which you want to use for serving the analytics. In my case, I will be using `analytics.selfhostlabs.dev`.
+
+    ```bash
+    BASE_URL=https://analytics.selfhostlabs.dev
+    ```
+
+    we have used https as we will be configuring the Caddy server to serve the Plausible Analytics using HTTPS later in the post.
+
+3. Put a random string in the `SECRET_KEY_BASE` field. You can generate a random string using the following command.
+
+    ```bash
+    openssl rand -base64 48
+    ```
+
+    output:
+
+    ```bash
+    ubuntu@selfhostlabs:~/analytics$ openssl rand -base64 48
+    S6KYL2R9hEPBsjN2Lc8+Q8wjItcKZQ6OZgnH1OkeqkOwcfNSFWNKLL1ORuW1WF+p
+    ```
+
+4. Copy the generated string and replace the `SECRET_KEY_BASE` with it.
+
+    ```bash
+    SECRET_KEY_BASE=S6KYL2R9hEPBsjN2Lc8+Q8wjItcKZQ6OZgnH1OkeqkOwcfNSFWNKLL1ORuW1WF+p
+    ```
+
+5. Here is the updated `plausible-conf.env` file.
+
+    ```bash
+    BASE_URL=https://analytics.selfhostlabs.dev
+    SECRET_KEY_BASE=S6KYL2R9hEPBsjN2Lc8+Q8wjItcKZQ6OZgnH1OkeqkOwcfNSFWNKLL1ORuW1WF+p
+    ```
+
+    Make sure to replace the domain name and secret key with your actual domain name and secret key.
+
+6. Now we have to configure the reverse proxy to serve the Plausible Analytics using HTTPS. We will use the Caddy server which comes with the repository. Open the `reverse-proxy/docker-compose.caddy-gen.yml` file to start configuring it.
+
+    ```bash
+    nano reverse-proxy/docker-compose.caddy-gen.yml
+    ```
+
+    Check the plausible block in the file. Here is the default configuration.
+
+    ```yaml showLineNumbers
+    plausible:
+        labels:
+          virtual.host: "example.com" # change to your domain name
+          virtual.port: "8000"
+          virtual.tls-email: "admin@example.com" # change to your email
+    ```
+
+7. Replace the `virtual.host` with the domain name with the domain which we used in the `plausible-conf.env` file. It will be used to serve the Plausible Analytics and also put the email address in the `virtual.tls-email` field. Here is the updated configuration.
+
+    ```yaml {3,5} showLineNumbers
+    plausible:
+        labels:
+          virtual.host: "analytics.selfhostlabs.dev"
+          virtual.port: "8000"
+          virtual.tls-email: "lab@selfhostlabs.dev"
+    ```
+
+8. Save and exit the file.
+
+### Step 4: Configure DNS records for the domain
+
+1. Let's configure the DNS records for the domain which we are going to use to serve the Analytics. For this, we will create an A record pointing your domain to the IP address of the server. In my case, I will be using `analytics.selfhostlabs.dev` as the domain to point to 159.65.157.121.
+
+2. Login to your domain registrar and navigate to the DNS management section.
+3. Create an A record with the following details.
+
+      - Record Type: A
+      - Host: your domain name (analytics)
+      - Points to: IP address of your server
+
+      <Image
+      src="/static/images/plausible-analytics/dns_records.png"
+      alt="DNS Records"
+      width="1080"
+      height="720"
+      />
+
+4. Save the changes and the DNS records will be updated. It may take some time to propagate the DNS records. You can check the propagation status using [whatsmydns.net](https://www.whatsmydns.net/).
+5. Once the DNS records are propagated, you can proceed to the next step.
+
+## Step 5: Run the Plausible Analytics
+
+1. Now that we have configured everything, let's start with running the Plausible Analytics using Docker. Navigate to the directory where you have cloned the repository and run the following command.
+
+    ```bash
+    docker compose -f docker-compose.yml -f reverse-proxy/docker-compose.caddy-gen.yml up -d
+    ```
+
+2. It will start with downloading the required images and then start the Plausible Analytics and Caddy reverse proxy server. Once the services are up and running, you can go to the domain which you have configured to access the Plausible Analytics.
+
+3. Open the domain in the browser and it will show you folowing screen and ask you to create an account.
+
+    <Image
+    src="/static/images/plausible-analytics/create_account.png"
+    alt="Create Account"
+    width="1080"
+    height="720"
+    />
+
+4. fill in the details and click on "Create account" button. Once the account is created, you will be redirected to the setup page where you have to fill in the details about your website.
+
+    <Image
+    src="/static/images/plausible-analytics/setup_domain.png"
+    alt="Setup Domain"
+    width="1080"
+    height="720"
+    />
+
+5. Fill in the details and click on "Add snippet" button. It will show you the snippet which you have to add to head section of your website.
+
+    <Image
+    src="/static/images/plausible-analytics/add_snippet.png"
+    alt="Add Snippet"
+    width="1080"
+    height="720"
+    />
+
+6. Click on "Start Collecting data" button and you will be redirected to the dashboard where you can see Plausible Analytics started to listening to the events.
+
+    <Image
+    src="/static/images/plausible-analytics/analytics_dashboard.png"
+    alt="Analytics Dashboard"
+    width="1080"
+    height="720"
+    />
+
+Here we have successfully installed and configured the Plausible Analytics to run behind a reverse proxy using Docker. You can start using the Plausible Analytics to track the events on your website.
+
+I hope this post was helpful to you. Please let me know your feedback in the comments section.
+
+Thank you for reading.

@@ -1,0 +1,11 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "markdownlint.config": {
+    "MD033": false, 
+    "MD041":false, // First line in file should be a top level header
+  },
+  "files.associations": {
+    "*.mdx": "markdown"
+  }
+}
